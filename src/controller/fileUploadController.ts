@@ -8,39 +8,26 @@ const pool = new Pool({
     host: 'localhost',
     database: 'PG_DATABASE',
     password: 'surya123',
-    port:'5432',
+    port: '5432',
 });
 
-const uploadFile = async (req: any, res: any) => {
-    if (!req.file) {
-        return res.status(400).send('No file uploaded.');
-    }
-
-    const filePath = path.join(__dirname, '../uploads', req.file.filename);
-
+exports.uploadFile = async (req: any, res: any) => {
     try {
-        const client = await pool.connect();
-        const stream = fs.createReadStream(filePath);
-        const csvStream = csv();
-
-        csvStream
-            .on('data', async (row: any) => {
-                const { name, age } = row;
-                await client.query('INSERT INTO data (name, age) VALUES ($1, $2)', [name, parseInt(age)]);
-            })
-            .on('end', async () => {
-                client.release();
-                fs.unlinkSync(filePath); 
-                res.send('File processed');
-            });
-
-        stream.pipe(csvStream);
+        await pool.connect();
+        const filePath = path.resolve(req.file.path);
+        const copyCommand = `
+          COPY persons (first_name, last_name, dob, email)
+          FROM '${filePath}'
+          DELIMITER ','
+          CSV HEADER;
+        `;
+        await pool.query(copyCommand);
+        res.json({ message: "Successfully uploaded files" });
     } catch (error) {
         res.status(500).send('Error processing file');
         console.error(error);
     }
-};
-
-module.exports = {
-    uploadFile,
+    finally {
+        await pool.end();
+    }
 };
